@@ -39,12 +39,17 @@ public static class AppHost
                 var apiKeyManager = new ApiKeyManager();
                 var apiKey = apiKeyManager.LoadKey() ?? hostContext.Configuration["GeminiApiKey"];
 
+                // --- THIS IS THE MISSING LINE ---
+                // Register HttpClient as a singleton with the configured timeout.
+                services.AddSingleton(new HttpClient
+                    { Timeout = TimeSpan.FromMinutes(appSettings.Api.ApiTimeoutMinutes) });
+
                 // Only register GenerativeModel if apiKey is not null or empty
                 if (!string.IsNullOrWhiteSpace(apiKey))
                     services.AddSingleton(provider =>
                     {
                         var apiSettings = provider.GetRequiredService<ApiSettings>();
-                        var httpClient = provider.GetRequiredService<HttpClient>();
+                        var httpClient = provider.GetRequiredService<HttpClient>(); // This line now works
                         var safetySettings = new List<SafetySetting>
                         {
                             new()
