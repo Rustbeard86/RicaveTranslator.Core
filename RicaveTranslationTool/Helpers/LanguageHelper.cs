@@ -1,6 +1,8 @@
 ﻿using System.Diagnostics.CodeAnalysis;
 using System.Text.RegularExpressions;
+
 using RicaveTranslator.Core.Models;
+
 using Spectre.Console;
 
 namespace RicaveTranslator.Core.Helpers;
@@ -28,20 +30,26 @@ public partial class LanguageHelper(AppSettings appSettings)
         AnsiConsole.Write(table);
     }
 
-    [GeneratedRegex(@"\s*\(([^)]+)\)", RegexOptions.Compiled)]
+    [GeneratedRegex(@"^(.*?)\s*\(([^)]+)\)$", RegexOptions.Compiled)]
     private static partial Regex LanguageFolderRegex();
 
     /// <summary>
     ///     Returns a sanitized folder name for a language.
-    ///     Example: "Chinese (Simplified)" -> "Chinese(Simplified)"
-    ///     "Czech (Czech Republic)" -> "Czech(Czech-Republic)"
+    ///     Example: "Chinese (Simplified)" -> "Chinese_Simplified"
+    ///              "Czech (Czech Republic)" -> "Czech_Czech_Republic"
+    ///              "Korean (South Korea)" -> "Korean_South_Korea"
     /// </summary>
     public static string GetLanguageFolderName(string languageName)
     {
-        // Remove space before '(' and replace spaces inside parentheses with '-'
-        return LanguageFolderRegex().Replace(
-            languageName,
-            m => "(" + m.Groups[1].Value.Replace(" ", "-") + ")"
-        );
+        var match = LanguageFolderRegex().Match(languageName);
+        if (match.Success)
+        {
+            // Group 1: language name, Group 2: content inside parentheses
+            var main = match.Groups[1].Value.Replace(" ", "_");
+            var sub = match.Groups[2].Value.Replace(" ", "_");
+            return $"{main}_{sub}";
+        }
+        // If no parentheses, just replace spaces with underscores
+        return languageName.Replace(" ", "_");
     }
 }
