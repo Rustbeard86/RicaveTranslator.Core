@@ -62,8 +62,10 @@ public static class Program
         var resumeCmd = new Command("resume", "Resumes the last failed job")
             { verboseOption, alwaysCreateInfoFileOption };
 
-        // Completion install command
         var installCompletionCommand = new Command("install-completion", "Installs tab completion for PowerShell.");
+
+        // --- NEW: Set Key Command ---
+        var setKeyCommand = new Command("set-key", "Saves your Gemini API key securely for future use.");
 
         newCmd.SetHandler((lang, verbose, alwaysCreate) => Run(CommandType.New, lang, verbose, alwaysCreate),
             langCodesOption, verboseOption, alwaysCreateInfoFileOption);
@@ -83,15 +85,28 @@ public static class Program
 
         installCompletionCommand.SetHandler(InstallCompletion);
 
+        // --- NEW: Handler for the Set Key Command ---
+        setKeyCommand.SetHandler(() =>
+        {
+            var apiKey = AnsiConsole.Prompt(
+                new TextPrompt<string>("Please enter your [yellow]Gemini API key[/]:")
+                    .PromptStyle("blue")
+                    .Secret());
+
+            var apiKeyManager = new ApiKeyManager();
+            apiKeyManager.SaveKey(apiKey);
+            AnsiConsole.MarkupLine("[bold green]✓ Success![/] Your API key has been saved securely.");
+        });
+
         return new RootCommand("Ricave Game XML Translator")
         {
-            newCmd, allCmd, syncAllCmd, generateManifestCmd, fixCmd, debugFixCmd, resumeCmd, installCompletionCommand
+            newCmd, allCmd, syncAllCmd, generateManifestCmd, fixCmd, debugFixCmd, resumeCmd, installCompletionCommand,
+            setKeyCommand
         };
     }
 
     private static void InstallCompletion()
     {
-        // Only supports Windows PowerShell for now.
         if (!OperatingSystem.IsWindows())
         {
             AnsiConsole.MarkupLine(
@@ -153,8 +168,20 @@ public static class Program
 
         try
         {
-            // The API key check is now moved into AppHost
             var host = AppHost.Create();
+
+            // --- NEW: API Key validation logic ---
+            var apiKeyManager = host.Services.GetRequiredService<ApiKeyManager>();
+            var apiKey = apiKeyManager.LoadKey() ?? Environment.GetEnvironmentVariable("GEMINI_API_KEY");
+
+            if (string.IsNullOrEmpty(apiKey))
+            {
+                AnsiConsole.MarkupLine("[bold red]Error: Gemini API key not found.[/]");
+                AnsiConsole.MarkupLine(
+                    "Please set it using the '[yellow]set-key[/]' command or the '[yellow]GEMINI_API_KEY[/]' environment variable.");
+                return;
+            }
+
             var appSettings = host.Services.GetRequiredService<AppSettings>();
             appSettings.AlwaysCreateInfoFile = alwaysCreateInfoFile;
             if (!ValidateConfiguration(appSettings.Paths)) return;
@@ -201,10 +228,6 @@ public static class Program
             }
 
             PrintFinalSummary(overallFileResults, overallSuccess, jobs.Count > 1);
-        }
-        catch (InvalidOperationException ex) // Catch the specific error from AppHost
-        {
-            AnsiConsole.MarkupLine($"[bold red]Configuration Error: {ex.Message}[/]");
         }
         catch (Exception ex)
         {

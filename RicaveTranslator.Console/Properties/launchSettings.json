@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "RicaveTranslator.Console": {
+      "commandName": "Project",
+      "commandLineArgs": "sync-all"
+    }
+  }
+}
