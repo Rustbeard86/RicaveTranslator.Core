@@ -33,7 +33,10 @@ public class LanguageProcessor(
         if (!languageHelper.TryGetFormalName(languageCode, out var formalLanguageName))
             return [];
 
-        var targetLanguagePath = Path.Combine(pathSettings.LanguagesBasePath, formalLanguageName);
+        var targetLanguagePath = Path.Combine(
+            pathSettings.LanguagesBasePath,
+            LanguageHelper.GetLanguageFolderName(formalLanguageName)
+        );
         fileService.EnsureDirectory(targetLanguagePath);
 
         var manifestPath = Path.Combine(targetLanguagePath, "translation_manifest.json");
@@ -104,7 +107,7 @@ public class LanguageProcessor(
         ConcurrentDictionary<string, ConcurrentDictionary<string, string>> concurrentManifest,
         CancellationToken cancellationToken)
     {
-        var failures = new ConcurrentDictionary<string, Exception>();
+        //var failures = new ConcurrentDictionary<string, Exception>();
         var debugData = new ConcurrentDictionary<string, List<string>>();
         var fileResults = new ConcurrentBag<(string File, string Status, string? Error)>();
 
@@ -145,7 +148,7 @@ public class LanguageProcessor(
                         }
                         catch (Exception ex)
                         {
-                            failures.TryAdd(filePath, ex);
+                            //failures.TryAdd(filePath, ex);
                             fileResults.Add((relativePath, "Failed", ex.GetBaseException().Message));
                         }
                     });
