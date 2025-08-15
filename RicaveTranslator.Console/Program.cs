@@ -17,7 +17,7 @@ public static class Program
 
         if (args.Length == 0)
         {
-            var host = AppHost.Create(Environment.GetEnvironmentVariable("GEMINI_API_KEY") ?? string.Empty, false);
+            var host = AppHost.Create(Environment.GetEnvironmentVariable("GEMINI_API_KEY") ?? string.Empty);
             var jobService = host.Services.GetRequiredService<JobService>();
             jobService.PrintUsageInstructions();
             return 0;
@@ -94,7 +94,7 @@ public static class Program
                 return;
             }
 
-            var host = AppHost.Create(apiKey, verbose);
+            var host = AppHost.Create(apiKey);
             var appSettings = host.Services.GetRequiredService<AppSettings>();
             appSettings.AlwaysCreateInfoFile = alwaysCreateInfoFile;
 
@@ -129,7 +129,8 @@ public static class Program
                     AnsiConsole.MarkupLine($"[bold aqua]--- Processing Job '[yellow]{job.JobId}[/]' ---[/]");
                 }
 
-                var jobResults = await processor.ProcessJobAsync(job, cancellationTokenSource.Token);
+                // Pass the verbose flag here
+                var jobResults = await processor.ProcessJobAsync(job, verbose, cancellationTokenSource.Token);
                 overallFileResults.AddRange(jobResults);
 
                 if (job.IsComplete())

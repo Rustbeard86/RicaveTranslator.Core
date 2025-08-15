@@ -6,7 +6,7 @@
 public class AppSettings
 {
     public PathSettings Paths { get; set; } = new();
-    public ApiSettings API { get; set; } = new();
+    public ApiSettings Api { get; set; } = new();
     public Dictionary<string, string> SupportedLanguages { get; set; } = [];
     public bool AlwaysCreateInfoFile { get; set; }
 }

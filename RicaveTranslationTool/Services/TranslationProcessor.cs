@@ -12,7 +12,7 @@ public class TranslationProcessor(LanguageProcessor languageProcessor)
     ///     Orchestrates the entire translation process for a given job.
     /// </summary>
     public async Task<List<(string Language, string File, string Status, string? Error)>> ProcessJobAsync(
-        TranslationJob job, CancellationToken cancellationToken = default)
+        TranslationJob job, bool verbose, CancellationToken cancellationToken = default)
     {
         if (job.IsFixMode)
         {
@@ -30,7 +30,8 @@ public class TranslationProcessor(LanguageProcessor languageProcessor)
             cancellationToken.ThrowIfCancellationRequested();
 
             // Delegate the processing for each language to the LanguageProcessor.
-            var languageResults = await languageProcessor.ProcessLanguageAsync(job, languageCode, cancellationToken);
+            var languageResults =
+                await languageProcessor.ProcessLanguageAsync(job, languageCode, verbose, cancellationToken);
             overallFileResults.AddRange(languageResults);
         }
 

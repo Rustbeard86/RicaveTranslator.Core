@@ -11,10 +11,10 @@ namespace RicaveTranslator.Console;
 
 public static class AppHost
 {
-    public static IHost Create(string apiKey, bool verbose)
+    public static IHost Create(string apiKey)
     {
         return Host.CreateDefaultBuilder()
-            .ConfigureAppConfiguration((context, config) =>
+            .ConfigureAppConfiguration((_, config) =>
             {
                 // Set the base path to the application's running directory and add appsettings.json
                 config.SetBasePath(AppContext.BaseDirectory)
@@ -27,13 +27,13 @@ public static class AppHost
                 hostContext.Configuration.GetSection("AppSettings").Bind(appSettings);
                 services.AddSingleton(appSettings);
 
-                // Now, register the nested settings classes so they can be injected directly
+                // Register the nested settings classes so they can be injected directly
                 services.AddSingleton(provider => provider.GetRequiredService<AppSettings>().Paths);
-                services.AddSingleton(provider => provider.GetRequiredService<AppSettings>().API);
+                services.AddSingleton(provider => provider.GetRequiredService<AppSettings>().Api);
 
                 // Register HttpClient and GenerativeModel
                 services.AddSingleton(new HttpClient
-                    { Timeout = TimeSpan.FromMinutes(appSettings.API.ApiTimeoutMinutes) });
+                    { Timeout = TimeSpan.FromMinutes(appSettings.Api.ApiTimeoutMinutes) });
                 services.AddSingleton(provider =>
                 {
                     var apiSettings = provider.GetRequiredService<ApiSettings>();
@@ -78,10 +78,10 @@ public static class AppHost
                     provider.GetRequiredService<PathSettings>(),
                     provider.GetRequiredService<ApiSettings>(),
                     provider.GetRequiredService<GenerativeModel>(),
+                    provider.GetRequiredService<FileProcessingService>(),
                     provider.GetRequiredService<ManifestService>(),
                     provider.GetRequiredService<VerificationService>(),
-                    provider.GetRequiredService<LanguageHelper>(),
-                    verbose
+                    provider.GetRequiredService<LanguageHelper>()
                 ));
             })
             .Build();

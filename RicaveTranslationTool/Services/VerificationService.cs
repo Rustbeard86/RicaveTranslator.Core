@@ -12,6 +12,7 @@ namespace RicaveTranslator.Core.Services;
 public class VerificationService(
     PathSettings pathSettings,
     ApiSettings apiSettings,
+    FileProcessingService fileService,
     NodeTranslationService nodeTranslationService)
 {
     public async Task VerifyAndFixFileAsync(
@@ -36,8 +37,8 @@ public class VerificationService(
             return;
         }
 
-        var sourceDoc = await FileProcessingService.LoadXmlAsync(sourceFilePath, cancellationToken);
-        var targetDoc = await FileProcessingService.LoadXmlAsync(targetFilePath, cancellationToken);
+        var sourceDoc = await fileService.LoadXmlAsync(sourceFilePath, cancellationToken);
+        var targetDoc = await fileService.LoadXmlAsync(targetFilePath, cancellationToken);
         var targetElements = targetDoc.Root?.Elements().ToDictionary(e => e.Name.LocalName) ?? [];
         manifest.TryGetValue(relativePath, out var fileHashes);
 
@@ -72,7 +73,7 @@ public class VerificationService(
 
         UpdateDocumentAndManifest(targetDoc, manifest, relativePath, itemsToTranslate, translatedTexts);
 
-        await FileProcessingService.SaveXmlAsync(targetFilePath, targetDoc, cancellationToken);
+        await fileService.SaveXmlAsync(targetFilePath, targetDoc, cancellationToken);
     }
 
     public async Task TranslateNewFileAsync(
@@ -87,14 +88,14 @@ public class VerificationService(
         var targetFilePath = Path.Combine(targetLanguagePath, relativePath);
         var targetFileDir = Path.GetDirectoryName(targetFilePath) ??
                             throw new DirectoryNotFoundException($"Could not determine directory for {targetFilePath}");
-        FileProcessingService.EnsureDirectory(targetFileDir);
+        fileService.EnsureDirectory(targetFileDir);
 
-        var doc = await FileProcessingService.LoadXmlAsync(sourceFilePath, cancellationToken);
+        var doc = await fileService.LoadXmlAsync(sourceFilePath, cancellationToken);
         var itemsToTranslate = TranslationUtils.GetTranslatableItems(doc);
 
         if (itemsToTranslate.Count == 0)
         {
-            if (!File.Exists(targetFilePath)) FileProcessingService.CopyFile(sourceFilePath, targetFilePath);
+            if (!File.Exists(targetFilePath)) fileService.CopyFile(sourceFilePath, targetFilePath);
             task.Increment(100);
             return;
         }
@@ -108,7 +109,7 @@ public class VerificationService(
 
         UpdateDocumentAndManifest(doc, manifest, relativePath, itemsToTranslate, translatedTexts);
 
-        await FileProcessingService.SaveXmlAsync(targetFilePath, doc, cancellationToken);
+        await fileService.SaveXmlAsync(targetFilePath, doc, cancellationToken);
     }
 
     private static void UpdateDocumentAndManifest(

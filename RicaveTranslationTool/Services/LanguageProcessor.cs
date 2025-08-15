@@ -16,10 +16,10 @@ public class LanguageProcessor(
     PathSettings pathSettings,
     ApiSettings apiSettings,
     GenerativeModel geminiModel,
+    FileProcessingService fileService,
     ManifestService manifestService,
     VerificationService verificationService,
-    LanguageHelper languageHelper,
-    bool verbose = false)
+    LanguageHelper languageHelper)
 {
     /// <summary>
     ///     Processes all relevant files for a single language.
@@ -27,13 +27,14 @@ public class LanguageProcessor(
     public async Task<List<(string Language, string File, string Status, string? Error)>> ProcessLanguageAsync(
         TranslationJob job,
         string languageCode,
+        bool verbose,
         CancellationToken cancellationToken)
     {
         if (!languageHelper.TryGetFormalName(languageCode, out var formalLanguageName))
             return [];
 
         var targetLanguagePath = Path.Combine(pathSettings.LanguagesBasePath, formalLanguageName);
-        FileProcessingService.EnsureDirectory(targetLanguagePath);
+        fileService.EnsureDirectory(targetLanguagePath);
 
         var manifestPath = Path.Combine(targetLanguagePath, "translation_manifest.json");
         var manifest = await TranslationManifest.LoadAsync(manifestPath, cancellationToken);
@@ -71,7 +72,7 @@ public class LanguageProcessor(
         );
         await manifest.SaveAsync(manifestPath, CancellationToken.None);
 
-        PrintLanguageSummary(formalLanguageName, fileResults);
+        PrintLanguageSummary(formalLanguageName, fileResults, verbose);
 
         return [.. fileResults.Select(r => (formalLanguageName, r.File, r.Status, r.Error))];
     }
@@ -85,8 +86,11 @@ public class LanguageProcessor(
             var prompt =
                 $"What is the native name for the language '{formalLanguageName}'? Provide only the name itself, without any additional text or explanation. For example, for 'Japanese (Japan)', you should return '日本語（日本）'.";
             var result = await geminiModel.GenerateContentAsync(prompt, cancellationToken);
+
+            // Use static method as requested
             var nativeName = TranslationService.CleanApiResponse(result.Text, false);
-            await FileProcessingService.CreateInfoFileAsync(targetLanguagePath, formalLanguageName, languageCode,
+
+            await fileService.CreateInfoFileAsync(targetLanguagePath, formalLanguageName, languageCode,
                 nativeName,
                 cancellationToken);
         }
@@ -193,8 +197,9 @@ public class LanguageProcessor(
         ];
     }
 
-    private void PrintLanguageSummary(string formalLanguageName,
-        IReadOnlyCollection<(string File, string Status, string? Error)> fileResults)
+    private static void PrintLanguageSummary(string formalLanguageName,
+        IReadOnlyCollection<(string File, string Status, string? Error)> fileResults,
+        bool verbose)
     {
         var successCount = fileResults.Count(r => r.Status == "Success");
         var failCount = fileResults.Count(r => r.Status == "Failed");
