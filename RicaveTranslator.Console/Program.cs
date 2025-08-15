@@ -1,4 +1,6 @@
 ﻿using System.CommandLine;
+using System.CommandLine.Builder;
+using System.CommandLine.Parsing;
 using System.Text;
 using Microsoft.Extensions.DependencyInjection;
 using RicaveTranslator.Core.Models;
@@ -12,42 +14,57 @@ public static class Program
     public static async Task<int> Main(string[] args)
     {
         System.Console.OutputEncoding = Encoding.UTF8;
-        AnsiConsole.Clear();
-        AnsiConsole.MarkupLine("[bold aqua]--- Ricave Game XML Translator ---[/]");
+
+        // Show title unless running install-completion
+        if (args.Length == 0 || (args.Length > 0 && args[0] != "install-completion"))
+        {
+            AnsiConsole.Clear();
+            AnsiConsole.MarkupLine("[bold aqua]--- Ricave Game XML Translator ---[/]");
+        }
 
         if (args.Length == 0)
         {
-            var host = AppHost.Create(Environment.GetEnvironmentVariable("GEMINI_API_KEY") ?? string.Empty);
-            var jobService = host.Services.GetRequiredService<JobService>();
+            var tempHost = AppHost.Create();
+            var jobService = tempHost.Services.GetRequiredService<JobService>();
             jobService.PrintUsageInstructions();
             return 0;
         }
 
         var rootCommand = SetupCommandLine();
-        return await rootCommand.InvokeAsync(args);
+
+        var parser = new CommandLineBuilder(rootCommand)
+            .UseDefaults()
+            .UseSuggestDirective()
+            .Build();
+
+        return await parser.InvokeAsync(args);
     }
 
     private static RootCommand SetupCommandLine()
     {
-        // Options and Commands setup remains the same...
         var verboseOption = new Option<bool>(["--verbose", "-v"], "Enables verbose output for file-level details");
         var alwaysCreateInfoFileOption = new Option<bool>("--always-create-info-file", "Always recreate Info.xml");
         var langCodesOption = new Option<string[]>("--lang", "Language codes for the operation")
             { Arity = ArgumentArity.ZeroOrMore };
+
         var newCmd = new Command("new", "Translates languages from scratch")
             { langCodesOption, verboseOption, alwaysCreateInfoFileOption };
         var allCmd = new Command("all", "Translates all supported languages")
             { verboseOption, alwaysCreateInfoFileOption };
         var syncAllCmd = new Command("sync-all", "Translates new content and fixes all languages")
             { verboseOption, alwaysCreateInfoFileOption };
-        var generateManifestCmd = new Command("generate-manifest", "Generates source hashes for existing translations")
+        var generateManifestCmd = new Command("generate-manifest", "Generates source hashes")
             { langCodesOption, verboseOption, alwaysCreateInfoFileOption };
         var fixCmd = new Command("fix", "Verifies and fixes translations")
             { langCodesOption, verboseOption, alwaysCreateInfoFileOption };
-        var debugFixCmd = new Command("debug-fix", "Reports why files need fixing without modifying them")
+        var debugFixCmd = new Command("debug-fix", "Reports file issues without modifying them")
             { langCodesOption, verboseOption, alwaysCreateInfoFileOption };
         var resumeCmd = new Command("resume", "Resumes the last failed job")
             { verboseOption, alwaysCreateInfoFileOption };
+
+        // Completion install command
+        var installCompletionCommand = new Command("install-completion", "Installs tab completion for PowerShell.");
+
         newCmd.SetHandler((lang, verbose, alwaysCreate) => Run(CommandType.New, lang, verbose, alwaysCreate),
             langCodesOption, verboseOption, alwaysCreateInfoFileOption);
         allCmd.SetHandler((verbose, alwaysCreate) => Run(CommandType.All, [], verbose, alwaysCreate), verboseOption,
@@ -63,10 +80,61 @@ public static class Program
             langCodesOption, verboseOption, alwaysCreateInfoFileOption);
         resumeCmd.SetHandler((verbose, alwaysCreate) => Run(CommandType.Resume, [], verbose, alwaysCreate),
             verboseOption, alwaysCreateInfoFileOption);
+
+        installCompletionCommand.SetHandler(InstallCompletion);
+
         return new RootCommand("Ricave Game XML Translator")
         {
-            newCmd, allCmd, syncAllCmd, generateManifestCmd, fixCmd, debugFixCmd, resumeCmd
+            newCmd, allCmd, syncAllCmd, generateManifestCmd, fixCmd, debugFixCmd, resumeCmd, installCompletionCommand
         };
+    }
+
+    private static void InstallCompletion()
+    {
+        // Only supports Windows PowerShell for now.
+        if (!OperatingSystem.IsWindows())
+        {
+            AnsiConsole.MarkupLine(
+                "[red]Error: Automatic installation is currently only supported on Windows for PowerShell.[/]");
+            AnsiConsole.MarkupLine("For other shells, please run the '[grey]suggest[/]' directive manually.");
+            return;
+        }
+
+        try
+        {
+            AnsiConsole.MarkupLine("[cyan]Attempting to install PowerShell tab completion...[/]");
+
+            var exePath = Environment.ProcessPath;
+            if (string.IsNullOrEmpty(exePath))
+            {
+                AnsiConsole.MarkupLine("[red]Error: Could not determine the application path.[/]");
+                return;
+            }
+
+            var profilePath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                "WindowsPowerShell\\Microsoft.PowerShell_profile.ps1");
+
+            var profileDir = Path.GetDirectoryName(profilePath);
+            if (!string.IsNullOrEmpty(profileDir)) Directory.CreateDirectory(profileDir);
+
+            var registrationCommand =
+                $"Register-ArgumentCompleter -CommandName '{Path.GetFileName(exePath)}' -ScriptBlock ([scriptblock]::Create(\". '{exePath}' [suggest]\"))";
+
+            AnsiConsole.MarkupLine($"[grey]Profile path: {profilePath}[/]");
+
+            File.AppendAllText(profilePath, Environment.NewLine + registrationCommand + Environment.NewLine);
+
+            AnsiConsole.MarkupLine(
+                "[bold green]✓ Success![/] PowerShell completion script has been added to your profile.");
+            AnsiConsole.MarkupLine(
+                "[yellow]Please restart your PowerShell terminal for the changes to take effect.[/]");
+        }
+        catch (Exception ex)
+        {
+            AnsiConsole.MarkupLine("[bold red]An error occurred during installation:[/]");
+            AnsiConsole.WriteException(ex, ExceptionFormats.ShortenPaths);
+        }
     }
 
     private static async Task Run(CommandType command, string[] langCodes, bool verbose, bool alwaysCreateInfoFile)
@@ -74,46 +142,31 @@ public static class Program
         var cancellationTokenSource = new CancellationTokenSource();
         var overallSuccess = true;
 
-        // Add the ReSharper suppression comment here.
         // ReSharper disable once AccessToDisposedClosure
-        // ReSharper disable once AccessToModifiedClosure
         void CancelHandler(object? _, ConsoleCancelEventArgs eventArgs)
         {
             AnsiConsole.WriteLine();
             AnsiConsole.MarkupLine("[bold orange1]Cancellation requested. Finishing current job...[/]");
-            cancellationTokenSource?.Cancel();
+            cancellationTokenSource.Cancel();
             eventArgs.Cancel = true;
         }
 
         try
         {
-            var apiKey = Environment.GetEnvironmentVariable("GEMINI_API_KEY");
-            if (string.IsNullOrEmpty(apiKey))
-            {
-                AnsiConsole.MarkupLine("[bold red]Error: GEMINI_API_KEY environment variable not set.[/]");
-                return;
-            }
-
-            var host = AppHost.Create(apiKey);
+            // The API key check is now moved into AppHost
+            var host = AppHost.Create();
             var appSettings = host.Services.GetRequiredService<AppSettings>();
             appSettings.AlwaysCreateInfoFile = alwaysCreateInfoFile;
-
             if (!ValidateConfiguration(appSettings.Paths)) return;
-
             var jobService = host.Services.GetRequiredService<JobService>();
             var jobs = await jobService.GetJobsFromArgsAsync(command, langCodes);
             if (jobs == null || jobs.Count == 0) return;
-
             var processor = host.Services.GetRequiredService<TranslationProcessor>();
-
             System.Console.CancelKeyPress += CancelHandler;
-
             AnsiConsole.WriteLine();
             if (jobs.Count > 1)
                 AnsiConsole.MarkupLine("[grey]Press Ctrl+C to gracefully cancel after the current job completes.[/]");
-
             var overallFileResults = new List<(string Language, string File, string Status, string? Error)>();
-
             foreach (var job in jobs)
             {
                 if (cancellationTokenSource.IsCancellationRequested)
@@ -129,10 +182,8 @@ public static class Program
                     AnsiConsole.MarkupLine($"[bold aqua]--- Processing Job '[yellow]{job.JobId}[/]' ---[/]");
                 }
 
-                // Pass the verbose flag here
                 var jobResults = await processor.ProcessJobAsync(job, verbose, cancellationTokenSource.Token);
                 overallFileResults.AddRange(jobResults);
-
                 if (job.IsComplete())
                 {
                     AnsiConsole.WriteLine();
@@ -151,10 +202,9 @@ public static class Program
 
             PrintFinalSummary(overallFileResults, overallSuccess, jobs.Count > 1);
         }
-        catch (OperationCanceledException)
+        catch (InvalidOperationException ex) // Catch the specific error from AppHost
         {
-            AnsiConsole.WriteLine();
-            AnsiConsole.MarkupLine("[bold orange1]Operation cancelled by user. Exiting gracefully.[/]");
+            AnsiConsole.MarkupLine($"[bold red]Configuration Error: {ex.Message}[/]");
         }
         catch (Exception ex)
         {
@@ -166,7 +216,6 @@ public static class Program
         {
             System.Console.CancelKeyPress -= CancelHandler;
             cancellationTokenSource.Dispose();
-            cancellationTokenSource = null;
         }
     }
 

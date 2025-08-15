@@ -9,29 +9,38 @@ using RicaveTranslator.Core.Services;
 
 namespace RicaveTranslator.Console;
 
+public class SecretsAnchor
+{
+} // This class is used to anchor the user secrets in the development environment.
+
 public static class AppHost
 {
-    public static IHost Create(string apiKey)
+    public static IHost Create()
     {
         return Host.CreateDefaultBuilder()
-            .ConfigureAppConfiguration((_, config) =>
+            .ConfigureAppConfiguration((hostContext, config) =>
             {
-                // Set the base path to the application's running directory and add appsettings.json
                 config.SetBasePath(AppContext.BaseDirectory)
                     .AddJsonFile("appsettings.json", false, true);
+
+                // Load user secrets in Development environment
+                if (hostContext.HostingEnvironment.IsDevelopment()) config.AddUserSecrets<SecretsAnchor>();
             })
             .ConfigureServices((hostContext, services) =>
             {
-                // Bind the entire "AppSettings" section from the JSON to our AppSettings class
                 var appSettings = new AppSettings();
                 hostContext.Configuration.GetSection("AppSettings").Bind(appSettings);
-                services.AddSingleton(appSettings);
 
-                // Register the nested settings classes so they can be injected directly
+                // Get the API key from configuration (supports secrets.json)
+                var apiKey = hostContext.Configuration["GeminiApiKey"];
+                if (string.IsNullOrEmpty(apiKey))
+                    throw new InvalidOperationException(
+                        "GeminiApiKey is not set. Use 'dotnet user-secrets set \"GeminiApiKey\" \"your_key\"' to configure it.");
+
+                services.AddSingleton(appSettings);
                 services.AddSingleton(provider => provider.GetRequiredService<AppSettings>().Paths);
                 services.AddSingleton(provider => provider.GetRequiredService<AppSettings>().Api);
 
-                // Register HttpClient and GenerativeModel
                 services.AddSingleton(new HttpClient
                     { Timeout = TimeSpan.FromMinutes(appSettings.Api.ApiTimeoutMinutes) });
                 services.AddSingleton(provider =>
@@ -63,7 +72,6 @@ public static class AppHost
                         httpClient: httpClient);
                 });
 
-                // Register all the Core Services
                 services.AddSingleton<LanguageHelper>();
                 services.AddSingleton<FileProcessingService>();
                 services.AddSingleton<TranslationService>();
