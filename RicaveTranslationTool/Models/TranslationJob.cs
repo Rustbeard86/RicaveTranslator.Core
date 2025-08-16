@@ -9,7 +9,6 @@ namespace RicaveTranslator.Core.Models;
 public class TranslationJob
 {
     private static readonly string JobDirectory = Path.Combine(Environment.CurrentDirectory, ".translator_jobs");
-    private static readonly JsonSerializerOptions SJsonOptions = new() { WriteIndented = true };
 
     public string JobId { get; set; } = $"job_{DateTime.Now:yyyyMMdd_HHmmss}";
     public List<string> TargetLanguages { get; set; } = [];

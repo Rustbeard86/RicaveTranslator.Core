@@ -12,6 +12,4 @@ namespace RicaveTranslator.Core.SourceGeneratedContexts;
 [JsonSerializable(typeof(Dictionary<string, object>))]
 [JsonSerializable(typeof(Dictionary<string, string>))]
 [JsonSerializable(typeof(Dictionary<string, List<string>>))]
-public partial class AppJsonContext : JsonSerializerContext
-{
-}
+public partial class AppJsonContext : JsonSerializerContext;

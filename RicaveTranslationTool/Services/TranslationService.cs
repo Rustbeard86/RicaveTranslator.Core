@@ -9,7 +9,6 @@ namespace RicaveTranslator.Core.Services;
 
 public partial class TranslationService(ApiSettings apiSettings, GenerativeModel geminiModel)
 {
-    internal static readonly JsonSerializerOptions SJsonOptions = new() { WriteIndented = true };
     private static readonly JsonDocumentOptions SJsonDocOptions = new() { AllowTrailingCommas = true };
 
     [GeneratedRegex(@"```(?:json)?\s*(\{[\s\S]*\})\s*```", RegexOptions.Multiline)]

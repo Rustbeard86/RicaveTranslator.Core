@@ -1,8 +1,6 @@
-﻿using RicaveTranslator.Core.Helpers;
-
+﻿using System.Xml.Linq;
+using RicaveTranslator.Core.Helpers;
 using Spectre.Console;
-
-using System.Xml.Linq;
 
 #pragma warning disable CA1822 // Mark members as static
 

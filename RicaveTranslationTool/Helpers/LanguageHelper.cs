@@ -1,8 +1,6 @@
 ﻿using System.Diagnostics.CodeAnalysis;
 using System.Text.RegularExpressions;
-
 using RicaveTranslator.Core.Models;
-
 using Spectre.Console;
 
 namespace RicaveTranslator.Core.Helpers;
@@ -36,8 +34,8 @@ public partial class LanguageHelper(AppSettings appSettings)
     /// <summary>
     ///     Returns a sanitized folder name for a language.
     ///     Example: "Chinese (Simplified)" -> "Chinese_Simplified"
-    ///              "Czech (Czech Republic)" -> "Czech_Czech_Republic"
-    ///              "Korean (South Korea)" -> "Korean_South_Korea"
+    ///     "Czech (Czech Republic)" -> "Czech_Czech_Republic"
+    ///     "Korean (South Korea)" -> "Korean_South_Korea"
     /// </summary>
     public static string GetLanguageFolderName(string languageName)
     {
@@ -49,6 +47,7 @@ public partial class LanguageHelper(AppSettings appSettings)
             var sub = match.Groups[2].Value.Replace(" ", "_");
             return $"{main}_{sub}";
         }
+
         // If no parentheses, just replace spaces with underscores
         return languageName.Replace(" ", "_");
     }

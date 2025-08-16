@@ -1,12 +1,11 @@
 ﻿using System.Security.Cryptography;
 using System.Text;
-
 using Spectre.Console;
 
 namespace RicaveTranslator.Core.Services;
 
 /// <summary>
-/// Manages the secure storage and retrieval of the user's API key using DPAPI.
+///     Manages the secure storage and retrieval of the user's API key using DPAPI.
 /// </summary>
 public class ApiKeyManager
 {
@@ -40,10 +39,7 @@ public class ApiKeyManager
 
     public string? LoadKey()
     {
-        if (!OperatingSystem.IsWindows() || !File.Exists(_filePath))
-        {
-            return null;
-        }
+        if (!OperatingSystem.IsWindows() || !File.Exists(_filePath)) return null;
 
         try
         {
