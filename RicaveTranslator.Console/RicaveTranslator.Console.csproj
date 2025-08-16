@@ -13,6 +13,7 @@
 		<PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="8.0.0" />
 		<PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="8.0.0" />
 		<PackageReference Include="Redpoint.ThirdParty.System.CommandLine" Version="2025.1227.77" />
+		<PackageReference Include="Spectre.Console" Version="0.50.0" />
 	</ItemGroup>
 
 	<ItemGroup>

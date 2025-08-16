@@ -27,5 +27,9 @@ namespace RicaveTranslator.Console.Services
 
         /// <inheritdoc />
         public T Prompt<T>(IPrompt<T> prompt) => AnsiConsole.Prompt(prompt);
+
+        /// <inheritdoc />
+        public void WriteException(Exception exception, ExceptionFormats format = ExceptionFormats.Default) =>
+            AnsiConsole.WriteException(exception, format);
     }
 }

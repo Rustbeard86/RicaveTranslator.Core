@@ -1,12 +1,10 @@
 ﻿using RicaveTranslator.Core.Models;
-using Spectre.Console;
-
 namespace RicaveTranslator.Core.Services;
 
 /// <summary>
 ///     Orchestrates the high-level processing of a translation job, delegating language-specific tasks.
 /// </summary>
-public class TranslationProcessor(LanguageProcessor languageProcessor)
+public class TranslationProcessor(LanguageProcessor languageProcessor, IOutputService outputService)
 {
     /// <summary>
     ///     Orchestrates the entire translation process for a given job.
@@ -16,8 +14,8 @@ public class TranslationProcessor(LanguageProcessor languageProcessor)
     {
         if (job.IsFixMode)
         {
-            AnsiConsole.WriteLine();
-            AnsiConsole.MarkupLine(
+            outputService.WriteLine();
+            outputService.MarkupLine(
                 job.IsDebugMode
                     ? "[bold cyan]Running in Debug & Fix mode.[/]"
                     : "[bold cyan]Running in Sync & Fix mode.[/]");
@@ -43,7 +41,7 @@ public class TranslationProcessor(LanguageProcessor languageProcessor)
     /// <summary>
     ///     Prints a summary of the entire job if it involved multiple languages.
     /// </summary>
-    private static void PrintOverallSummary(TranslationJob job,
+    private void PrintOverallSummary(TranslationJob job,
         List<(string Language, string File, string Status, string? Error)> overallFileResults)
     {
         if (job.TargetLanguages.Count <= 1) return;
@@ -52,17 +50,17 @@ public class TranslationProcessor(LanguageProcessor languageProcessor)
         var totalFail = overallFileResults.Count(r => r.Status == "Failed");
         var totalFiles = overallFileResults.Count;
 
-        AnsiConsole.WriteLine();
-        AnsiConsole.MarkupLine(
+        outputService.WriteLine();
+        outputService.MarkupLine(
             $"[bold green]Overall Job Summary: {totalSuccess} succeeded, [red]{totalFail} failed, [yellow]{totalFiles} processed.[/]");
 
         if (totalFail > 0)
             foreach (var group in overallFileResults.Where(r => r.Status == "Failed").GroupBy(r => r.Language))
             {
-                AnsiConsole.WriteLine();
-                AnsiConsole.MarkupLine($"[red]Failures for {group.Key}:[/]");
+                outputService.WriteLine();
+                outputService.MarkupLine($"[red]Failures for {group.Key}:[/]");
                 foreach (var result in group)
-                    AnsiConsole.MarkupLine($"[red]    {result.File}: {result.Error}[/]");
+                    outputService.MarkupLine($"[red]    {result.File}: {result.Error}[/]");
             }
     }
 }

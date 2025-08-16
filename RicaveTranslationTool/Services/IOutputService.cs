@@ -45,5 +45,12 @@ namespace RicaveTranslator.Core.Services
         /// <param name="prompt">The prompt to display.</param>
         /// <returns>The user's input.</returns>
         T Prompt<T>(IPrompt<T> prompt);
+
+        /// <summary>
+        /// Writes an exception to the console.
+        /// </summary>
+        /// <param name="exception">The exception to write.</param>
+        /// <param name="format">The format of the exception.</param>
+        void WriteException(Exception exception, ExceptionFormats format = ExceptionFormats.Default);
     }
 }

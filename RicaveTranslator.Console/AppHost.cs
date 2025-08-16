@@ -94,7 +94,10 @@ public static class AppHost
                     provider.GetRequiredService<IOutputService>()
                 ));
                 services.AddSingleton<VerificationService>();
-                services.AddSingleton<TranslationProcessor>();
+                services.AddSingleton(provider => new TranslationProcessor(
+                    provider.GetRequiredService<LanguageProcessor>(),
+                    provider.GetRequiredService<IOutputService>()
+                ));
                 services.AddSingleton(provider => new JobService(
                     provider.GetRequiredService<PathSettings>(),
                     provider.GetRequiredService<LanguageHelper>(),
