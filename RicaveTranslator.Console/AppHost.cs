@@ -4,6 +4,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using RicaveTranslator.Core.Helpers;
+using RicaveTranslator.Core.Interfaces;
 using RicaveTranslator.Core.Models;
 using RicaveTranslator.Core.Services;
 
@@ -84,6 +85,7 @@ public static class AppHost
                 services.AddSingleton<VerificationService>();
                 services.AddSingleton<TranslationProcessor>();
                 services.AddSingleton<JobService>();
+                services.AddSingleton<IUserNotifier, SpectreNotifier>();
 
                 services.AddSingleton(provider => new LanguageProcessor(
                     provider.GetRequiredService<AppSettings>(),
@@ -93,7 +95,8 @@ public static class AppHost
                     provider.GetRequiredService<FileProcessingService>(),
                     provider.GetRequiredService<ManifestService>(),
                     provider.GetRequiredService<VerificationService>(),
-                    provider.GetRequiredService<LanguageHelper>()
+                    provider.GetRequiredService<LanguageHelper>(),
+                    provider.GetRequiredService<IUserNotifier>()
                 ));
             })
             .Build();

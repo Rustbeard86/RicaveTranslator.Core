@@ -1,6 +1,7 @@
 ﻿using System.Collections.Concurrent;
 using System.Xml.Linq;
 using RicaveTranslator.Core.Helpers;
+using RicaveTranslator.Core.Interfaces;
 using RicaveTranslator.Core.Models;
 using Spectre.Console;
 
@@ -11,7 +12,7 @@ public class ManifestService(PathSettings pathSettings)
     public async Task GenerateManifestForFileAsync(
         string sourceFilePath,
         string targetLanguagePath,
-        ProgressTask task,
+        IProgressTask task,
         ConcurrentDictionary<string, ConcurrentDictionary<string, string>> manifest,
         CancellationToken cancellationToken)
     {

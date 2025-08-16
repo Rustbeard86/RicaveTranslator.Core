@@ -1,6 +1,7 @@
 ﻿using System.Collections.Concurrent;
 using System.Text.Json;
 using RicaveTranslator.Core.Helpers;
+using RicaveTranslator.Core.Interfaces;
 using RicaveTranslator.Core.Models;
 using RicaveTranslator.Core.SourceGeneratedContexts;
 using Spectre.Console;
@@ -16,7 +17,7 @@ public class NodeTranslationService(ApiSettings apiSettings, TranslationService 
         Dictionary<string, TranslationItem> itemsToTranslate,
         string formalLanguageName,
         string sourceFilePath,
-        ProgressTask? task,
+        IProgressTask? task,
         CancellationToken cancellationToken)
     {
         var flatTextsToTranslate = new Dictionary<string, string>();
@@ -70,7 +71,7 @@ public class NodeTranslationService(ApiSettings apiSettings, TranslationService 
         Dictionary<string, TranslationItem> itemsToTranslate,
         string formalLanguageName,
         string sourceFilePath,
-        ProgressTask task,
+        IProgressTask task,
         CancellationToken cancellationToken)
     {
         var totalItems = itemsToTranslate.Count;

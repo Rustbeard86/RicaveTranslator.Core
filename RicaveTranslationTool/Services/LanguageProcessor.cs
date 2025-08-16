@@ -2,9 +2,9 @@
 using System.Text.Json;
 using GenerativeAI;
 using RicaveTranslator.Core.Helpers;
+using RicaveTranslator.Core.Interfaces;
 using RicaveTranslator.Core.Models;
 using RicaveTranslator.Core.SourceGeneratedContexts;
-using Spectre.Console;
 
 namespace RicaveTranslator.Core.Services;
 
@@ -19,7 +19,8 @@ public class LanguageProcessor(
     FileProcessingService fileService,
     ManifestService manifestService,
     VerificationService verificationService,
-    LanguageHelper languageHelper)
+    LanguageHelper languageHelper,
+    IUserNotifier notifier)
 {
     /// <summary>
     ///     Processes all relevant files for a single language.
@@ -53,13 +54,13 @@ public class LanguageProcessor(
         var filesToProcess = job.FailedFiles[languageCode];
         if (filesToProcess.Count == 0)
         {
-            AnsiConsole.WriteLine();
-            AnsiConsole.MarkupLine($"Language '[green]{formalLanguageName}[/]' has no files to process. Skipping.");
+            notifier.WriteLine();
+            notifier.MarkupLine($"Language '[green]{formalLanguageName}[/]' has no files to process. Skipping.");
             return [];
         }
 
-        AnsiConsole.WriteLine();
-        AnsiConsole.MarkupLine(
+        notifier.WriteLine();
+        notifier.MarkupLine(
             $"--- Processing [yellow]{filesToProcess.Count}[/] file(s) for [green]{formalLanguageName}[/] ---");
 
         var fileResults = await ProcessFilesConcurrentlyAsync(job, filesToProcess, targetLanguagePath,
@@ -75,7 +76,7 @@ public class LanguageProcessor(
         );
         await manifest.SaveAsync(manifestPath, CancellationToken.None);
 
-        PrintLanguageSummary(formalLanguageName, fileResults, verbose);
+        notifier.ShowLanguageSummary(formalLanguageName, fileResults, verbose);
 
         return [.. fileResults.Select(r => (formalLanguageName, r.File, r.Status, r.Error))];
     }
@@ -90,12 +91,13 @@ public class LanguageProcessor(
                 $"What is the native name for the language '{formalLanguageName}'? Provide only the name itself, without any additional text or explanation. For example, for 'Japanese (Japan)', you should return '日本語（日本）'.";
             var result = await geminiModel.GenerateContentAsync(prompt, cancellationToken);
 
-            // Use static method as requested
             var nativeName = TranslationService.CleanApiResponse(result.Text, false);
 
             await fileService.CreateInfoFileAsync(targetLanguagePath, formalLanguageName, languageCode,
                 nativeName,
                 cancellationToken);
+
+            notifier.MarkupLine($"[blue]- INFO:     Created Info.xml for {formalLanguageName}[/]");
         }
     }
 
@@ -107,7 +109,6 @@ public class LanguageProcessor(
         ConcurrentDictionary<string, ConcurrentDictionary<string, string>> concurrentManifest,
         CancellationToken cancellationToken)
     {
-        //var failures = new ConcurrentDictionary<string, Exception>();
         var debugData = new ConcurrentDictionary<string, List<string>>();
         var fileResults = new ConcurrentBag<(string File, string Status, string? Error)>();
 
@@ -120,44 +121,40 @@ public class LanguageProcessor(
             CancellationToken = cancellationToken
         };
 
-        await AnsiConsole.Progress()
-            .Columns(new TaskDescriptionColumn(), new ProgressBarColumn(), new PercentageColumn(), new SpinnerColumn())
-            .StartAsync(async ctx =>
+        await notifier.Progress(async ctx =>
+        {
+            try
             {
-                try
+                await Parallel.ForEachAsync(filesToProcess, parallelOptions, async (filePath, ct) =>
                 {
-                    await Parallel.ForEachAsync(filesToProcess, parallelOptions, async (filePath, ct) =>
+                    var relativePath = Path.GetRelativePath(pathSettings.TemplateBasePath, filePath);
+                    var escapedPath = relativePath.Replace("[", "[[").Replace("]", "]]"); // Basic escaping for markup
+                    var task = ctx.AddTask($"[grey]{escapedPath}[/]");
+
+                    try
                     {
-                        var relativePath = Path.GetRelativePath(pathSettings.TemplateBasePath, filePath);
-                        var escapedPath = Markup.Escape(relativePath);
-                        var task = ctx.AddTask($"[grey]{escapedPath}[/]");
+                        if (job.IsManifestGenerationMode)
+                            await manifestService.GenerateManifestForFileAsync(filePath, targetLanguagePath, task, concurrentManifest, ct);
+                        else if (job.IsFixMode)
+                            await verificationService.VerifyAndFixFileAsync(job, filePath, escapedPath,
+                                targetLanguagePath, formalLanguageName, task, debugData, concurrentManifest, ct);
+                        else
+                            await verificationService.TranslateNewFileAsync(filePath, targetLanguagePath,
+                                formalLanguageName, task, concurrentManifest, ct);
 
-                        try
-                        {
-                            if (job.IsManifestGenerationMode)
-                                await manifestService.GenerateManifestForFileAsync(filePath, targetLanguagePath, task,
-                                    concurrentManifest, ct);
-                            else if (job.IsFixMode)
-                                await verificationService.VerifyAndFixFileAsync(job, filePath, escapedPath,
-                                    targetLanguagePath, formalLanguageName, task, debugData, concurrentManifest, ct);
-                            else
-                                await verificationService.TranslateNewFileAsync(filePath, targetLanguagePath,
-                                    formalLanguageName, task, concurrentManifest, ct);
-
-                            fileResults.Add((PathUtils.Normalize(relativePath), "Success", null));
-                        }
-                        catch (Exception ex)
-                        {
-                            //failures.TryAdd(filePath, ex);
-                            fileResults.Add((relativePath, "Failed", ex.GetBaseException().Message));
-                        }
-                    });
-                }
-                catch (OperationCanceledException)
-                {
-                    // Suppress
-                }
-            });
+                        fileResults.Add((PathUtils.Normalize(relativePath), "Success", null));
+                    }
+                    catch (Exception ex)
+                    {
+                        fileResults.Add((relativePath, "Failed", ex.GetBaseException().Message));
+                    }
+                });
+            }
+            catch (OperationCanceledException)
+            {
+                // Suppress
+            }
+        });
 
         if (job.IsDebugMode && !debugData.IsEmpty)
         {
@@ -168,7 +165,7 @@ public class LanguageProcessor(
         return [.. fileResults];
     }
 
-    private static async Task SaveDebugReportAsync(TranslationJob job,
+    private async Task SaveDebugReportAsync(TranslationJob job,
         ConcurrentDictionary<string, List<string>> debugData, CancellationToken cancellationToken)
     {
         var debugDir = Path.Combine(Environment.CurrentDirectory, ".translator_debug");
@@ -182,8 +179,9 @@ public class LanguageProcessor(
         );
         await File.WriteAllTextAsync(debugFilePath, json, cancellationToken);
 
-        AnsiConsole.WriteLine();
-        AnsiConsole.MarkupLine($"[bold yellow]Debug report saved to:[/] [grey]{Markup.Escape(debugFilePath)}[/]");
+        notifier.WriteLine();
+        notifier.MarkupLine(
+            $"[bold yellow]Debug report saved to:[/] [grey]{debugFilePath.Replace("[", "[[").Replace("]", "]]")}[/]");
     }
 
     private static List<(string File, string Status, string? Error)> MarkDebugIssuesAsFailed(
@@ -198,30 +196,5 @@ public class LanguageProcessor(
                     ? (r.File, "Failed", "Debug issues reported (see debug log)")
                     : r)
         ];
-    }
-
-    private static void PrintLanguageSummary(string formalLanguageName,
-        IReadOnlyCollection<(string File, string Status, string? Error)> fileResults,
-        bool verbose)
-    {
-        var successCount = fileResults.Count(r => r.Status == "Success");
-        var failCount = fileResults.Count(r => r.Status == "Failed");
-
-        AnsiConsole.WriteLine();
-        AnsiConsole.MarkupLine(
-            $"[bold green]{successCount} files processed successfully for [green]{formalLanguageName}[/].[/]");
-        if (failCount > 0)
-        {
-            AnsiConsole.MarkupLine($"[bold red]{failCount} files failed for [green]{formalLanguageName}[/]:[/]");
-            foreach (var failResult in fileResults.Where(r => r.Status == "Failed"))
-                AnsiConsole.MarkupLine($"[red]    {failResult.File}: {failResult.Error}[/]");
-        }
-
-        if (verbose)
-            foreach (var result in fileResults)
-            {
-                var color = result.Status == "Success" ? "green" : "red";
-                AnsiConsole.MarkupLine($"[{color}]{result.Status}: {result.File}[/]");
-            }
     }
 }

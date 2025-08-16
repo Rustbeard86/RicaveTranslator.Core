@@ -1,6 +1,7 @@
 ﻿using System.Collections.Concurrent;
 using System.Xml.Linq;
 using RicaveTranslator.Core.Helpers;
+using RicaveTranslator.Core.Interfaces;
 using RicaveTranslator.Core.Models;
 using Spectre.Console;
 
@@ -21,7 +22,7 @@ public class VerificationService(
         string escapedPath,
         string targetLanguagePath,
         string formalLanguageName,
-        ProgressTask task,
+        IProgressTask task,
         ConcurrentDictionary<string, List<string>>? debugData,
         ConcurrentDictionary<string, ConcurrentDictionary<string, string>> manifest,
         CancellationToken cancellationToken)
@@ -80,7 +81,7 @@ public class VerificationService(
         string sourceFilePath,
         string targetLanguagePath,
         string formalLanguageName,
-        ProgressTask task,
+        IProgressTask task,
         ConcurrentDictionary<string, ConcurrentDictionary<string, string>> manifest,
         CancellationToken cancellationToken)
     {
