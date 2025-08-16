@@ -4,14 +4,16 @@ using RicaveTranslator.Core.Helpers;
 using RicaveTranslator.Core.Interfaces;
 using RicaveTranslator.Core.Models;
 using RicaveTranslator.Core.SourceGeneratedContexts;
-using Spectre.Console;
 
 namespace RicaveTranslator.Core.Services;
 
 /// <summary>
 ///     Handles the direct interaction with the translation API for a collection of nodes.
 /// </summary>
-public class NodeTranslationService(ApiSettings apiSettings, TranslationService translationService)
+public class NodeTranslationService(
+    ApiSettings apiSettings,
+    TranslationService translationService,
+    IUserNotifier notifier)
 {
     public async Task<Dictionary<string, string>> GetTranslationsForItemsAsync(
         Dictionary<string, TranslationItem> itemsToTranslate,
@@ -97,8 +99,9 @@ public class NodeTranslationService(ApiSettings apiSettings, TranslationService 
                 var itemsInChunk = chunk.Length;
                 Interlocked.Add(ref processedItems, itemsInChunk);
                 task.Value = processedItems;
+                var escapedFileName = Path.GetFileName(sourceFilePath).Replace("[", "[[").Replace("]", "]]");
                 task.Description =
-                    $"[yellow]INCREMENTAL:[/] {Markup.Escape(Path.GetFileName(sourceFilePath))} ({processedItems}/{totalItems})";
+                    $"[yellow]INCREMENTAL:[/] {escapedFileName} ({processedItems}/{totalItems})";
             }
             finally
             {
@@ -133,8 +136,9 @@ public class NodeTranslationService(ApiSettings apiSettings, TranslationService 
 
             if (itemsToFix.Count == 0) break;
 
-            AnsiConsole.MarkupLine(
-                $"[yellow]WARNING:[/] File [grey]{Markup.Escape(Path.GetFileName(sourceFilePath))}[/] has [bold red]{itemsToFix.Count}[/] formatting errors. Attempting fix {i + 1} of {apiSettings.MaxFormattingRetries}...");
+            var escapedFileName = Path.GetFileName(sourceFilePath).Replace("[", "[[").Replace("]", "]]");
+            notifier.MarkupLine(
+                $"[yellow]WARNING:[/] File [grey]{escapedFileName}[/] has [bold red]{itemsToFix.Count}[/] formatting errors. Attempting fix {i + 1} of {apiSettings.MaxFormattingRetries}...");
 
             var fixedTexts =
                 await translationService.CallTranslationApiAsync(itemsToFix, formalLanguageName, sourceFilePath, true,
@@ -147,7 +151,7 @@ public class NodeTranslationService(ApiSettings apiSettings, TranslationService 
         {
             var errorMsg =
                 $"After {apiSettings.MaxFormattingRetries} attempts, {itemsToFix.Count} items in {Path.GetFileName(sourceFilePath)} still have formatting errors.";
-            AnsiConsole.MarkupLine($"[bold red]ERROR:[/] {errorMsg}");
+            notifier.MarkupLine($"[bold red]ERROR:[/] {errorMsg}");
             await SaveFormattingErrorDebugFile(sourceFilePath, itemsToFix, translatedFlatTexts,
                 originalPlaceholdersMap, cancellationToken);
             throw new InvalidOperationException(
