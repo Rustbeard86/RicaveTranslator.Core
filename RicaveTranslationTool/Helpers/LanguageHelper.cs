@@ -2,12 +2,12 @@
 using System.Text.RegularExpressions;
 
 using RicaveTranslator.Core.Models;
-
+using RicaveTranslator.Core.Services;
 using Spectre.Console;
 
 namespace RicaveTranslator.Core.Helpers;
 
-public partial class LanguageHelper(AppSettings appSettings)
+public partial class LanguageHelper(AppSettings appSettings, IOutputService outputService)
 {
     private readonly Dictionary<string, string> _supportedLanguages =
         new(appSettings.SupportedLanguages, StringComparer.OrdinalIgnoreCase);
@@ -24,10 +24,10 @@ public partial class LanguageHelper(AppSettings appSettings)
 
     public void PrintSupportedLanguages()
     {
-        AnsiConsole.MarkupLine("Please use one of the following supported language codes:");
+        outputService.MarkupLine("Please use one of the following supported language codes:");
         var table = new Table().AddColumn("Code").AddColumn("Formal Name");
         foreach (var lang in _supportedLanguages) table.AddRow($"[yellow]{lang.Key}[/]", $"[green]{lang.Value}[/]");
-        AnsiConsole.Write(table);
+        outputService.WriteTable(table);
     }
 
     [GeneratedRegex(@"^(.*?)\s*\(([^)]+)\)$", RegexOptions.Compiled)]

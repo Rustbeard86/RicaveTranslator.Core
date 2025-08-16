@@ -1,7 +1,5 @@
 ﻿using RicaveTranslator.Core.Helpers;
 
-using Spectre.Console;
-
 using System.Xml.Linq;
 
 #pragma warning disable CA1822 // Mark members as static
@@ -17,7 +15,7 @@ namespace RicaveTranslator.Core.Services;
 ///     Designed as an injectable service for architectural consistency and testability.
 ///     Supports directory creation, XML file loading and saving, file copying, and creation of language info files.
 /// </summary>
-public class FileProcessingService
+public class FileProcessingService(IOutputService outputService)
 {
     public void EnsureDirectory(string path)
     {
@@ -53,6 +51,6 @@ public class FileProcessingService
         );
         var infoFilePath = Path.Combine(targetLanguagePath, "Info.xml");
         await File.WriteAllTextAsync(infoFilePath, infoDoc.ToString(), cancellationToken);
-        AnsiConsole.MarkupLine($"[blue]- INFO:     Created Info.xml for {formalLanguageName}[/]");
+        outputService.MarkupLine($"[blue]- INFO:     Created Info.xml for {formalLanguageName}[/]");
     }
 }

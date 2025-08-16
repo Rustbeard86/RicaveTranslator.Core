@@ -10,7 +10,7 @@ namespace RicaveTranslator.Core.Services;
 /// <summary>
 ///     Handles the direct interaction with the translation API for a collection of nodes.
 /// </summary>
-public class NodeTranslationService(ApiSettings apiSettings, TranslationService translationService)
+public class NodeTranslationService(ApiSettings apiSettings, TranslationService translationService, IOutputService outputService)
 {
     public async Task<Dictionary<string, string>> GetTranslationsForItemsAsync(
         Dictionary<string, TranslationItem> itemsToTranslate,
@@ -132,7 +132,7 @@ public class NodeTranslationService(ApiSettings apiSettings, TranslationService 
 
             if (itemsToFix.Count == 0) break;
 
-            AnsiConsole.MarkupLine(
+            outputService.MarkupLine(
                 $"[yellow]WARNING:[/] File [grey]{Markup.Escape(Path.GetFileName(sourceFilePath))}[/] has [bold red]{itemsToFix.Count}[/] formatting errors. Attempting fix {i + 1} of {apiSettings.MaxFormattingRetries}...");
 
             var fixedTexts =
@@ -146,7 +146,7 @@ public class NodeTranslationService(ApiSettings apiSettings, TranslationService 
         {
             var errorMsg =
                 $"After {apiSettings.MaxFormattingRetries} attempts, {itemsToFix.Count} items in {Path.GetFileName(sourceFilePath)} still have formatting errors.";
-            AnsiConsole.MarkupLine($"[bold red]ERROR:[/] {errorMsg}");
+            outputService.MarkupLine($"[bold red]ERROR:[/] {errorMsg}");
             await SaveFormattingErrorDebugFile(sourceFilePath, itemsToFix, translatedFlatTexts,
                 originalPlaceholdersMap, cancellationToken);
             throw new InvalidOperationException(

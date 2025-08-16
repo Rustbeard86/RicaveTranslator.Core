@@ -19,7 +19,8 @@ public class LanguageProcessor(
     FileProcessingService fileService,
     ManifestService manifestService,
     VerificationService verificationService,
-    LanguageHelper languageHelper)
+    LanguageHelper languageHelper,
+    IOutputService outputService)
 {
     /// <summary>
     ///     Processes all relevant files for a single language.
@@ -53,13 +54,13 @@ public class LanguageProcessor(
         var filesToProcess = job.FailedFiles[languageCode];
         if (filesToProcess.Count == 0)
         {
-            AnsiConsole.WriteLine();
-            AnsiConsole.MarkupLine($"Language '[green]{formalLanguageName}[/]' has no files to process. Skipping.");
+            outputService.WriteLine();
+            outputService.MarkupLine($"Language '[green]{formalLanguageName}[/]' has no files to process. Skipping.");
             return [];
         }
 
-        AnsiConsole.WriteLine();
-        AnsiConsole.MarkupLine(
+        outputService.WriteLine();
+        outputService.MarkupLine(
             $"--- Processing [yellow]{filesToProcess.Count}[/] file(s) for [green]{formalLanguageName}[/] ---");
 
         var fileResults = await ProcessFilesConcurrentlyAsync(job, filesToProcess, targetLanguagePath,
@@ -120,9 +121,9 @@ public class LanguageProcessor(
             CancellationToken = cancellationToken
         };
 
-        await AnsiConsole.Progress()
-            .Columns(new TaskDescriptionColumn(), new ProgressBarColumn(), new PercentageColumn(), new SpinnerColumn())
-            .StartAsync(async ctx =>
+        await outputService.Progress(
+            [new TaskDescriptionColumn(), new ProgressBarColumn(), new PercentageColumn(), new SpinnerColumn()],
+            async ctx =>
             {
                 try
                 {
@@ -168,7 +169,7 @@ public class LanguageProcessor(
         return [.. fileResults];
     }
 
-    private static async Task SaveDebugReportAsync(TranslationJob job,
+    private async Task SaveDebugReportAsync(TranslationJob job,
         ConcurrentDictionary<string, List<string>> debugData, CancellationToken cancellationToken)
     {
         var debugDir = Path.Combine(Environment.CurrentDirectory, ".translator_debug");
@@ -182,8 +183,8 @@ public class LanguageProcessor(
         );
         await File.WriteAllTextAsync(debugFilePath, json, cancellationToken);
 
-        AnsiConsole.WriteLine();
-        AnsiConsole.MarkupLine($"[bold yellow]Debug report saved to:[/] [grey]{Markup.Escape(debugFilePath)}[/]");
+        outputService.WriteLine();
+        outputService.MarkupLine($"[bold yellow]Debug report saved to:[/] [grey]{Markup.Escape(debugFilePath)}[/]");
     }
 
     private static List<(string File, string Status, string? Error)> MarkDebugIssuesAsFailed(
@@ -200,28 +201,28 @@ public class LanguageProcessor(
         ];
     }
 
-    private static void PrintLanguageSummary(string formalLanguageName,
+    private void PrintLanguageSummary(string formalLanguageName,
         IReadOnlyCollection<(string File, string Status, string? Error)> fileResults,
         bool verbose)
     {
         var successCount = fileResults.Count(r => r.Status == "Success");
         var failCount = fileResults.Count(r => r.Status == "Failed");
 
-        AnsiConsole.WriteLine();
-        AnsiConsole.MarkupLine(
+        outputService.WriteLine();
+        outputService.MarkupLine(
             $"[bold green]{successCount} files processed successfully for [green]{formalLanguageName}[/].[/]");
         if (failCount > 0)
         {
-            AnsiConsole.MarkupLine($"[bold red]{failCount} files failed for [green]{formalLanguageName}[/]:[/]");
+            outputService.MarkupLine($"[bold red]{failCount} files failed for [green]{formalLanguageName}[/]:[/]");
             foreach (var failResult in fileResults.Where(r => r.Status == "Failed"))
-                AnsiConsole.MarkupLine($"[red]    {failResult.File}: {failResult.Error}[/]");
+                outputService.MarkupLine($"[red]    {failResult.File}: {failResult.Error}[/]");
         }
 
         if (verbose)
             foreach (var result in fileResults)
             {
                 var color = result.Status == "Success" ? "green" : "red";
-                AnsiConsole.MarkupLine($"[{color}]{result.Status}: {result.File}[/]");
+                outputService.MarkupLine($"[{color}]{result.Status}: {result.File}[/]");
             }
     }
 }

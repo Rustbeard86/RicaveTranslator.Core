@@ -6,6 +6,7 @@ using Microsoft.Extensions.Hosting;
 using RicaveTranslator.Core.Helpers;
 using RicaveTranslator.Core.Models;
 using RicaveTranslator.Core.Services;
+using RicaveTranslator.Console.Services;
 
 namespace RicaveTranslator.Console;
 
@@ -34,9 +35,11 @@ public static class AppHost
                 services.AddSingleton(provider => provider.GetRequiredService<AppSettings>().Paths);
                 services.AddSingleton(provider => provider.GetRequiredService<AppSettings>().Api);
 
-                services.AddSingleton<ApiKeyManager>();
+                services.AddSingleton(provider => new ApiKeyManager(
+                    provider.GetRequiredService<IOutputService>()
+                ));
 
-                var apiKeyManager = new ApiKeyManager();
+                var apiKeyManager = services.BuildServiceProvider().GetRequiredService<ApiKeyManager>();
                 var apiKey = apiKeyManager.LoadKey() ?? hostContext.Configuration["GeminiApiKey"];
 
                 // Register HttpClient as a singleton with the configured timeout.
@@ -76,14 +79,27 @@ public static class AppHost
                             httpClient: httpClient);
                     });
 
-                services.AddSingleton<LanguageHelper>();
-                services.AddSingleton<FileProcessingService>();
+                services.AddSingleton(provider => new LanguageHelper(
+                    provider.GetRequiredService<AppSettings>(),
+                    provider.GetRequiredService<IOutputService>()
+                ));
+                services.AddSingleton(provider => new FileProcessingService(
+                    provider.GetRequiredService<IOutputService>()
+                ));
                 services.AddSingleton<TranslationService>();
                 services.AddSingleton<ManifestService>();
-                services.AddSingleton<NodeTranslationService>();
+                services.AddSingleton(provider => new NodeTranslationService(
+                    provider.GetRequiredService<ApiSettings>(),
+                    provider.GetRequiredService<TranslationService>(),
+                    provider.GetRequiredService<IOutputService>()
+                ));
                 services.AddSingleton<VerificationService>();
                 services.AddSingleton<TranslationProcessor>();
-                services.AddSingleton<JobService>();
+                services.AddSingleton(provider => new JobService(
+                    provider.GetRequiredService<PathSettings>(),
+                    provider.GetRequiredService<LanguageHelper>(),
+                    provider.GetRequiredService<IOutputService>()
+                ));
 
                 services.AddSingleton(provider => new LanguageProcessor(
                     provider.GetRequiredService<AppSettings>(),
@@ -93,7 +109,8 @@ public static class AppHost
                     provider.GetRequiredService<FileProcessingService>(),
                     provider.GetRequiredService<ManifestService>(),
                     provider.GetRequiredService<VerificationService>(),
-                    provider.GetRequiredService<LanguageHelper>()
+                    provider.GetRequiredService<LanguageHelper>(),
+                    provider.GetRequiredService<IOutputService>()
                 ));
             })
             .Build();

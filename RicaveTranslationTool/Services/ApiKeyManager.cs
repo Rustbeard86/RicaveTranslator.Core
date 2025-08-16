@@ -1,8 +1,6 @@
 ﻿using System.Security.Cryptography;
 using System.Text;
 
-using Spectre.Console;
-
 namespace RicaveTranslator.Core.Services;
 
 /// <summary>
@@ -10,10 +8,12 @@ namespace RicaveTranslator.Core.Services;
 /// </summary>
 public class ApiKeyManager
 {
+    private readonly IOutputService _outputService;
     private readonly string _filePath;
 
-    public ApiKeyManager()
+    public ApiKeyManager(IOutputService outputService)
     {
+        _outputService = outputService;
         // Store the encrypted key in the user's local app data folder.
         var appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         var appDirectory = Path.Combine(appDataPath, "RicaveTranslator");
@@ -25,7 +25,7 @@ public class ApiKeyManager
     {
         if (!OperatingSystem.IsWindows())
         {
-            AnsiConsole.MarkupLine("[yellow]Warning: Secure key storage is only supported on Windows.[/]");
+            _outputService.MarkupLine("[yellow]Warning: Secure key storage is only supported on Windows.[/]");
             return;
         }
 
@@ -57,8 +57,8 @@ public class ApiKeyManager
         catch (CryptographicException)
         {
             // This can happen if the file is corrupted or was encrypted by another user.
-            AnsiConsole.MarkupLine("[red]Error: Could not decrypt the saved API key. It may be corrupted.[/]");
-            AnsiConsole.MarkupLine($"[grey]You can try deleting the file at {_filePath} and setting the key again.[/]");
+            _outputService.MarkupLine("[red]Error: Could not decrypt the saved API key. It may be corrupted.[/]");
+            _outputService.MarkupLine($"[grey]You can try deleting the file at {_filePath} and setting the key again.[/]");
             return null;
         }
     }
