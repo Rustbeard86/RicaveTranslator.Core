@@ -86,6 +86,11 @@ public class SpectreNotifier : IUserNotifier
             "  [yellow]--always-create-info-file[/]   (Always recreate Info.xml, even if it exists)");
     }
 
+    public bool Confirm(string prompt)
+    {
+        return AnsiConsole.Confirm(prompt);
+    }
+
     public void ShowLanguageSummary(string formalLanguageName,
         IReadOnlyCollection<(string File, string Status, string? Error)> fileResults, bool verbose)
     {

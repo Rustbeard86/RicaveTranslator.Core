@@ -33,4 +33,5 @@ public interface IUserNotifier
     void LogSuccess(string message);
     string SelectJob(string[] jobIds);
     void PrintUsageInstructions();
+    bool Confirm(string prompt);
 }

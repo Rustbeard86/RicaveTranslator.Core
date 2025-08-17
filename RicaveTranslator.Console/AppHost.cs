@@ -37,7 +37,18 @@ public static class AppHost
 
                 // Register UI and platform-specific services first
                 services.AddSingleton<IUserNotifier, SpectreNotifier>();
-                services.AddSingleton<IApiKeyStore, WindowsApiKeyStore>();
+
+                // --- PLATFORM SWITCHING LOGIC ---
+                if (OperatingSystem.IsWindows())
+                    services.AddSingleton<IApiKeyStore, WindowsApiKeyStore>();
+                else if (OperatingSystem.IsMacOS())
+                    services.AddSingleton<IApiKeyStore, MacOsKeychainStore>();
+                else if (OperatingSystem.IsLinux())
+                    services.AddSingleton<IApiKeyStore, LinuxKeyringStore>();
+                else
+                    // Use the new insecure fallback for any other OS
+                    services.AddSingleton<IApiKeyStore, EncryptedFileApiKeyStore>();
+
                 services.AddSingleton<ApiKeyManager>();
 
                 // Build a temporary service provider to resolve the ApiKeyManager
