@@ -2,7 +2,10 @@
 using System.CommandLine.Builder;
 using System.CommandLine.Parsing;
 using System.Text;
+using GenerativeAI;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using RicaveTranslator.Core.Interfaces;
 using RicaveTranslator.Core.Models;
 using RicaveTranslator.Core.Services;
 using Spectre.Console;
@@ -15,22 +18,22 @@ public static class Program
     {
         System.Console.OutputEncoding = Encoding.UTF8;
 
-        // Show title unless running install-completion
         if (args.Length == 0 || (args.Length > 0 && args[0] != "install-completion"))
         {
             AnsiConsole.Clear();
             AnsiConsole.MarkupLine("[bold aqua]--- Ricave Game XML Translator ---[/]");
         }
 
+        var host = AppHost.Create();
+
         if (args.Length == 0)
         {
-            var tempHost = AppHost.Create();
-            var jobService = tempHost.Services.GetRequiredService<JobService>();
+            var jobService = host.Services.GetRequiredService<JobService>();
             jobService.PrintUsageInstructions();
             return 0;
         }
 
-        var rootCommand = SetupCommandLine();
+        var rootCommand = SetupCommandLine(host);
 
         var parser = new CommandLineBuilder(rootCommand)
             .UseDefaults()
@@ -40,7 +43,7 @@ public static class Program
         return await parser.InvokeAsync(args);
     }
 
-    private static RootCommand SetupCommandLine()
+    private static RootCommand SetupCommandLine(IHost host)
     {
         var verboseOption = new Option<bool>(["--verbose", "-v"], "Enables verbose output for file-level details");
         var alwaysCreateInfoFileOption = new Option<bool>("--always-create-info-file", "Always recreate Info.xml");
@@ -61,41 +64,32 @@ public static class Program
             { langCodesOption, verboseOption, alwaysCreateInfoFileOption };
         var resumeCmd = new Command("resume", "Resumes the last failed job")
             { verboseOption, alwaysCreateInfoFileOption };
-
         var installCompletionCommand = new Command("install-completion", "Installs tab completion for PowerShell.");
-
-        // --- NEW: Set Key Command ---
         var setKeyCommand = new Command("set-key", "Saves your Gemini API key securely for future use.");
 
-        newCmd.SetHandler((lang, verbose, alwaysCreate) => Run(CommandType.New, lang, verbose, alwaysCreate),
+        newCmd.SetHandler((lang, verbose, alwaysCreate) => Run(host, CommandType.New, lang, verbose, alwaysCreate),
             langCodesOption, verboseOption, alwaysCreateInfoFileOption);
-        allCmd.SetHandler((verbose, alwaysCreate) => Run(CommandType.All, [], verbose, alwaysCreate), verboseOption,
-            alwaysCreateInfoFileOption);
-        syncAllCmd.SetHandler((verbose, alwaysCreate) => Run(CommandType.SyncAll, [], verbose, alwaysCreate),
+        allCmd.SetHandler((verbose, alwaysCreate) => Run(host, CommandType.All, [], verbose, alwaysCreate),
+            verboseOption, alwaysCreateInfoFileOption);
+        syncAllCmd.SetHandler((verbose, alwaysCreate) => Run(host, CommandType.SyncAll, [], verbose, alwaysCreate),
             verboseOption, alwaysCreateInfoFileOption);
         generateManifestCmd.SetHandler(
-            (lang, verbose, alwaysCreate) => Run(CommandType.GenerateManifest, lang, verbose, alwaysCreate),
+            (lang, verbose, alwaysCreate) => Run(host, CommandType.GenerateManifest, lang, verbose, alwaysCreate),
             langCodesOption, verboseOption, alwaysCreateInfoFileOption);
-        fixCmd.SetHandler((lang, verbose, alwaysCreate) => Run(CommandType.Fix, lang, verbose, alwaysCreate),
+        fixCmd.SetHandler((lang, verbose, alwaysCreate) => Run(host, CommandType.Fix, lang, verbose, alwaysCreate),
             langCodesOption, verboseOption, alwaysCreateInfoFileOption);
-        debugFixCmd.SetHandler((lang, verbose, alwaysCreate) => Run(CommandType.DebugFix, lang, verbose, alwaysCreate),
+        debugFixCmd.SetHandler(
+            (lang, verbose, alwaysCreate) => Run(host, CommandType.DebugFix, lang, verbose, alwaysCreate),
             langCodesOption, verboseOption, alwaysCreateInfoFileOption);
-        resumeCmd.SetHandler((verbose, alwaysCreate) => Run(CommandType.Resume, [], verbose, alwaysCreate),
+        resumeCmd.SetHandler((verbose, alwaysCreate) => Run(host, CommandType.Resume, [], verbose, alwaysCreate),
             verboseOption, alwaysCreateInfoFileOption);
 
         installCompletionCommand.SetHandler(InstallCompletion);
 
-        // --- NEW: Handler for the Set Key Command ---
         setKeyCommand.SetHandler(() =>
         {
-            var apiKey = AnsiConsole.Prompt(
-                new TextPrompt<string>("Please enter your [yellow]Gemini API key[/]:")
-                    .PromptStyle("blue")
-                    .Secret());
-
-            var apiKeyManager = new ApiKeyManager();
-            apiKeyManager.SaveKey(apiKey);
-            AnsiConsole.MarkupLine("[bold green]✓ Success![/] Your API key has been saved securely.");
+            var apiKeyManager = host.Services.GetRequiredService<ApiKeyManager>();
+            apiKeyManager.SaveKey();
         });
 
         return new RootCommand("Ricave Game XML Translator")
@@ -118,7 +112,6 @@ public static class Program
         try
         {
             AnsiConsole.MarkupLine("[cyan]Attempting to install PowerShell tab completion...[/]");
-
             var exePath = Environment.ProcessPath;
             if (string.IsNullOrEmpty(exePath))
             {
@@ -126,20 +119,15 @@ public static class Program
                 return;
             }
 
-            var profilePath = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+            var profilePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
                 "WindowsPowerShell\\Microsoft.PowerShell_profile.ps1");
-
             var profileDir = Path.GetDirectoryName(profilePath);
             if (!string.IsNullOrEmpty(profileDir)) Directory.CreateDirectory(profileDir);
 
             var registrationCommand =
                 $"Register-ArgumentCompleter -CommandName '{Path.GetFileName(exePath)}' -ScriptBlock ([scriptblock]::Create(\". '{exePath}' [suggest]\"))";
-
             AnsiConsole.MarkupLine($"[grey]Profile path: {profilePath}[/]");
-
             File.AppendAllText(profilePath, Environment.NewLine + registrationCommand + Environment.NewLine);
-
             AnsiConsole.MarkupLine(
                 "[bold green]✓ Success![/] PowerShell completion script has been added to your profile.");
             AnsiConsole.MarkupLine(
@@ -152,31 +140,27 @@ public static class Program
         }
     }
 
-    private static async Task Run(CommandType command, string[] langCodes, bool verbose, bool alwaysCreateInfoFile)
+    private static async Task Run(IHost host, CommandType command, string[] langCodes, bool verbose,
+        bool alwaysCreateInfoFile)
     {
         var cancellationTokenSource = new CancellationTokenSource();
         var overallSuccess = true;
 
-        // ReSharper disable once AccessToDisposedClosure
         void CancelHandler(object? _, ConsoleCancelEventArgs eventArgs)
         {
             AnsiConsole.WriteLine();
             AnsiConsole.MarkupLine("[bold orange1]Cancellation requested. Finishing current job...[/]");
+            // ReSharper disable once AccessToDisposedClosure
             cancellationTokenSource.Cancel();
             eventArgs.Cancel = true;
         }
 
         try
         {
-            var host = AppHost.Create();
-
-            // --- NEW: API Key validation logic ---
-            var apiKeyManager = host.Services.GetRequiredService<ApiKeyManager>();
-            var apiKey = apiKeyManager.LoadKey() ?? Environment.GetEnvironmentVariable("GEMINI_API_KEY");
-
-            if (string.IsNullOrEmpty(apiKey))
+            var apiKey = host.Services.GetService<GenerativeModel>();
+            if (apiKey == null)
             {
-                AnsiConsole.MarkupLine("[bold red]Error: Gemini API key not found.[/]");
+                AnsiConsole.MarkupLine("[bold red]Error: Gemini API key not found or is invalid.[/]");
                 AnsiConsole.MarkupLine(
                     "Please set it using the '[yellow]set-key[/]' command or the '[yellow]GEMINI_API_KEY[/]' environment variable.");
                 return;
@@ -185,15 +169,17 @@ public static class Program
             var appSettings = host.Services.GetRequiredService<AppSettings>();
             appSettings.AlwaysCreateInfoFile = alwaysCreateInfoFile;
             if (!ValidateConfiguration(appSettings.Paths)) return;
+
             var jobService = host.Services.GetRequiredService<JobService>();
             var jobs = await jobService.GetJobsFromArgsAsync(command, langCodes);
             if (jobs == null || jobs.Count == 0) return;
+
             var processor = host.Services.GetRequiredService<TranslationProcessor>();
             System.Console.CancelKeyPress += CancelHandler;
             AnsiConsole.WriteLine();
             if (jobs.Count > 1)
                 AnsiConsole.MarkupLine("[grey]Press Ctrl+C to gracefully cancel after the current job completes.[/]");
-            var overallFileResults = new List<(string Language, string File, string Status, string? Error)>();
+
             foreach (var job in jobs)
             {
                 if (cancellationTokenSource.IsCancellationRequested)
@@ -209,8 +195,7 @@ public static class Program
                     AnsiConsole.MarkupLine($"[bold aqua]--- Processing Job '[yellow]{job.JobId}[/]' ---[/]");
                 }
 
-                var jobResults = await processor.ProcessJobAsync(job, verbose, cancellationTokenSource.Token);
-                overallFileResults.AddRange(jobResults);
+                await processor.ProcessJobAsync(job, verbose, cancellationTokenSource.Token);
                 if (job.IsComplete())
                 {
                     AnsiConsole.WriteLine();
@@ -227,7 +212,14 @@ public static class Program
                 }
             }
 
-            PrintFinalSummary(overallFileResults, overallSuccess, jobs.Count > 1);
+            var notifier = host.Services.GetRequiredService<IUserNotifier>();
+            if (jobs.Count > 1)
+            {
+                notifier.WriteLine();
+                notifier.MarkupLine(overallSuccess
+                    ? "[bold green]All jobs in the bulk operation completed successfully.[/]"
+                    : "[bold yellow]Bulk operation finished with some errors.[/]");
+            }
         }
         catch (Exception ex)
         {
@@ -239,35 +231,6 @@ public static class Program
         {
             System.Console.CancelKeyPress -= CancelHandler;
             cancellationTokenSource.Dispose();
-        }
-    }
-
-    private static void PrintFinalSummary(List<(string Language, string File, string Status, string? Error)> results,
-        bool success, bool isBulk)
-    {
-        var totalFiles = results.Count;
-        var totalSuccess = results.Count(r => r.Status == "Success");
-        var totalFail = results.Count(r => r.Status == "Failed");
-
-        AnsiConsole.WriteLine();
-        AnsiConsole.MarkupLine(
-            $"[bold]Total: [green]{totalSuccess} succeeded[/], [red]{totalFail} failed[/], [yellow]{totalFiles} processed[/].[/]");
-
-        if (totalFail > 0)
-            foreach (var group in results.Where(r => r.Status == "Failed").GroupBy(r => r.Language))
-            {
-                AnsiConsole.WriteLine();
-                AnsiConsole.MarkupLine($"[red]Failures for {group.Key}:[/]");
-                foreach (var failResult in group)
-                    AnsiConsole.MarkupLine($"[red]    {failResult.File}: {failResult.Error}[/]");
-            }
-
-        if (isBulk)
-        {
-            AnsiConsole.WriteLine();
-            AnsiConsole.MarkupLine(success
-                ? "[bold green]All jobs in the bulk operation completed successfully.[/]"
-                : "[bold yellow]Bulk operation finished with some errors.[/]");
         }
     }
 

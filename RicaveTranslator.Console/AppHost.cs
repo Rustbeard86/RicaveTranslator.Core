@@ -35,9 +35,14 @@ public static class AppHost
                 services.AddSingleton(provider => provider.GetRequiredService<AppSettings>().Paths);
                 services.AddSingleton(provider => provider.GetRequiredService<AppSettings>().Api);
 
+                // Register UI and platform-specific services first
+                services.AddSingleton<IUserNotifier, SpectreNotifier>();
+                services.AddSingleton<IApiKeyStore, WindowsApiKeyStore>();
                 services.AddSingleton<ApiKeyManager>();
 
-                var apiKeyManager = new ApiKeyManager();
+                // Build a temporary service provider to resolve the ApiKeyManager
+                var serviceProvider = services.BuildServiceProvider();
+                var apiKeyManager = serviceProvider.GetRequiredService<ApiKeyManager>();
                 var apiKey = apiKeyManager.LoadKey() ?? hostContext.Configuration["GeminiApiKey"];
 
                 // Register HttpClient as a singleton with the configured timeout.
@@ -77,6 +82,7 @@ public static class AppHost
                             httpClient: httpClient);
                     });
 
+                // Register Core Services
                 services.AddSingleton<LanguageHelper>();
                 services.AddSingleton<FileProcessingService>();
                 services.AddSingleton<TranslationService>();
@@ -85,19 +91,7 @@ public static class AppHost
                 services.AddSingleton<VerificationService>();
                 services.AddSingleton<TranslationProcessor>();
                 services.AddSingleton<JobService>();
-                services.AddSingleton<IUserNotifier, SpectreNotifier>();
-
-                services.AddSingleton(provider => new LanguageProcessor(
-                    provider.GetRequiredService<AppSettings>(),
-                    provider.GetRequiredService<PathSettings>(),
-                    provider.GetRequiredService<ApiSettings>(),
-                    provider.GetRequiredService<GenerativeModel>(),
-                    provider.GetRequiredService<FileProcessingService>(),
-                    provider.GetRequiredService<ManifestService>(),
-                    provider.GetRequiredService<VerificationService>(),
-                    provider.GetRequiredService<LanguageHelper>(),
-                    provider.GetRequiredService<IUserNotifier>()
-                ));
+                services.AddSingleton<LanguageProcessor>();
             })
             .Build();
     }
